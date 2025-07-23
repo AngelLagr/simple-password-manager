@@ -58,14 +58,12 @@ def merge_vaults(new_entries: dict, existing_entries: dict, master_pwd: str, mer
         return new_entries
     
     elif merge_strategy == "backup":
-        # Créer une sauvegarde de l'ancien vault
         backup_file = f"data/vault_backup_{int(os.path.getmtime(VAULT_FILE))}.enc"
         shutil.copy2(VAULT_FILE, backup_file)
         save_vault(new_entries, master_pwd)
         return new_entries
     
     elif merge_strategy == "merge":
-        # Fusionner les entrées
         merged_entries = existing_entries.copy()
         conflicts = []
         

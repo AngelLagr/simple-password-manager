@@ -1,11 +1,35 @@
+import os
 import customtkinter as ctk
 from tkinter import messagebox, filedialog
 from storage import load_vault, save_vault, create_new_vault
 from password_generator import generate_password
 import difflib
+import atexit
+import signal
+import sys
 
 master_pwd = ''
 vault_data = {}
+
+def cleanup_on_exit():
+    global master_pwd, vault_data
+    
+    master_pwd = ''
+    vault_data.clear()
+    
+    try:
+        import pyperclip
+        pyperclip.copy('')
+    except:
+        pass
+
+def signal_handler(signum, frame):
+    cleanup_on_exit()
+    sys.exit(0)
+
+atexit.register(cleanup_on_exit)
+signal.signal(signal.SIGINT, signal_handler)
+signal.signal(signal.SIGTERM, signal_handler)
 
 ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("blue")
@@ -24,6 +48,9 @@ class LoginWindow(ctk.CTk):
         
         self.load_button = ctk.CTkButton(self, text="Load Vault File", command=self.load_vault_file)
         self.load_button.pack(pady=5)
+
+        # Gérer la fermeture de fenêtre
+        self.protocol("WM_DELETE_WINDOW", self.quit_login)
 
         # Check vault presence
         import os
@@ -54,7 +81,11 @@ class LoginWindow(ctk.CTk):
 
         master_pwd = pwd
         self.withdraw()
-        MainApp().mainloop()
+        try:
+            MainApp().mainloop()
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to start main application: {e}")
+            self.deiconify() 
 
     def load_vault_file(self):
         global master_pwd, vault_data
@@ -74,12 +105,10 @@ class LoginWindow(ctk.CTk):
         try:
             loaded_data = load_vault(pwd, file_path)
             
-            # Vérifier si on a besoin de gérer une fusion
             if isinstance(loaded_data, dict) and "needs_merge" in loaded_data:
                 new_entries = loaded_data["new_entries"]
                 existing_entries = loaded_data["existing_entries"]
                 
-                # Demander à l'utilisateur ce qu'il veut faire
                 choice = self.show_merge_dialog(len(new_entries), len(existing_entries))
                 
                 if choice == "cancel":
@@ -105,7 +134,11 @@ class LoginWindow(ctk.CTk):
             
             master_pwd = pwd
             self.withdraw()
-            MainApp().mainloop()
+            try:
+                MainApp().mainloop()
+            except Exception as e:
+                messagebox.showerror("Error", f"Failed to start main application: {e}")
+                self.deiconify() 
             
         except Exception as e:
             messagebox.showerror("Error", f"Failed to load vault: {e}")
@@ -116,6 +149,11 @@ class LoginWindow(ctk.CTk):
         dialog.geometry("450x300")
         dialog.transient(self)
         dialog.grab_set()
+        
+        def close_dialog():
+            result["choice"] = "cancel"
+            dialog.destroy()
+        dialog.protocol("WM_DELETE_WINDOW", close_dialog)
         
         result = {"choice": "cancel"}
         
@@ -143,31 +181,55 @@ class LoginWindow(ctk.CTk):
         dialog.wait_window()
         return result["choice"]
 
+    def quit_login(self):
+        global master_pwd, vault_data
+        
+        master_pwd = ''
+        vault_data.clear()
+        
+        try:
+            import pyperclip
+            pyperclip.copy('')
+        except:
+            pass
+        
+        try:
+            self.quit()
+        except:
+            pass
+        try:
+            self.destroy()
+        except:
+            pass
+
 class MainApp(ctk.CTk):
     def __init__(self):
         super().__init__()
         self.title("Password Manager")
         self.geometry("600x550")
+
+        global vault_data
+        if not isinstance(vault_data, dict):
+            vault_data = {}
         self.filtered_data = vault_data.copy()
 
-        # Barre de recherche
+        self._after_ids = set()
+
         self.search_frame = ctk.CTkFrame(self)
         self.search_frame.pack(pady=10, padx=10, fill='x')
-        
         ctk.CTkLabel(self.search_frame, text="Search:").pack(side='left', padx=5)
         self.search_entry = ctk.CTkEntry(self.search_frame, placeholder_text="Search sites...")
         self.search_entry.pack(side='left', fill='x', expand=True, padx=5)
         self.search_entry.bind('<KeyRelease>', self.on_search)
-        
         self.clear_btn = ctk.CTkButton(self.search_frame, text="Clear", width=60, command=self.clear_search)
         self.clear_btn.pack(side='right', padx=5)
-
         self.scrollable_frame = ctk.CTkScrollableFrame(self, width=580, height=350)
         self.scrollable_frame.pack(pady=10)
-
         self.add_btn = ctk.CTkButton(self, text="Add Entry", command=self.add_entry_popup)
         self.add_btn.pack(pady=10)
-
+        self.quit_btn = ctk.CTkButton(self, text="Quit", fg_color="red", hover_color="darkred", command=self.quit_app)
+        self.quit_btn.pack(pady=5)
+        self.protocol("WM_DELETE_WINDOW", self.quit_app)
         self.refresh_list()
 
     def on_search(self, event=None):
@@ -176,15 +238,19 @@ class MainApp(ctk.CTk):
             self.filtered_data = vault_data.copy()
         else:
             self.filtered_data = {}
-            for site, creds in vault_data.items():
-                site_lower = site.lower()
-                username_lower = creds['username'].lower()
-                
-                if (search_term in site_lower or 
-                    search_term in username_lower or
-                    any(difflib.get_close_matches(search_term, [site_lower], cutoff=0.6)) or
-                    any(difflib.get_close_matches(search_term, [username_lower], cutoff=0.6))):
-                    self.filtered_data[site] = creds
+            if isinstance(vault_data, dict):
+                for site, creds in vault_data.items():
+                    if not isinstance(creds, dict) or 'username' not in creds:
+                        continue
+                        
+                    site_lower = site.lower()
+                    username_lower = creds['username'].lower()
+                    
+                    if (search_term in site_lower or 
+                        search_term in username_lower or
+                        any(difflib.get_close_matches(search_term, [site_lower], cutoff=0.6)) or
+                        any(difflib.get_close_matches(search_term, [username_lower], cutoff=0.6))):
+                        self.filtered_data[site] = creds
         
         self.refresh_list()
 
@@ -196,7 +262,14 @@ class MainApp(ctk.CTk):
     def refresh_list(self):
         for widget in self.scrollable_frame.winfo_children():
             widget.destroy()
+        
+        if not isinstance(vault_data, dict):
+            return
+            
         for site, creds in self.filtered_data.items():
+            if not isinstance(creds, dict) or 'username' not in creds or 'password' not in creds:
+                continue
+                
             frame = ctk.CTkFrame(self.scrollable_frame)
             frame.pack(pady=5, padx=10, fill='x')
             ctk.CTkLabel(frame, text=site, width=100).pack(side='left')
@@ -209,7 +282,23 @@ class MainApp(ctk.CTk):
     def clip(self, pwd):
         import pyperclip
         pyperclip.copy(pwd)
-        self.after(5000, lambda: pyperclip.copy(''))
+        if hasattr(self, '_clipboard_timer'):
+            try:
+                self.after_cancel(self._clipboard_timer)
+                self._after_ids.discard(self._clipboard_timer)
+            except:
+                pass
+        self._clipboard_timer = self.after(5000, self._clear_clipboard)
+        self._after_ids.add(self._clipboard_timer)
+
+    def _clear_clipboard(self):
+        try:
+            # Vérifier que l'application n'est pas en cours de fermeture
+            if self.winfo_exists():
+                import pyperclip
+                pyperclip.copy('')
+        except Exception:
+            pass
 
     def delete_entry(self, site):
         if site in vault_data:
@@ -226,6 +315,10 @@ class MainApp(ctk.CTk):
         win = ctk.CTkToplevel(self)
         win.title(f"Edit Entry - {site}")
         win.geometry("350x300")
+        
+        def close_edit_window():
+            win.destroy()
+        win.protocol("WM_DELETE_WINDOW", close_edit_window)
         
         current_data = vault_data[site]
         
@@ -278,6 +371,11 @@ class MainApp(ctk.CTk):
         win = ctk.CTkToplevel(self)
         win.title("New Entry")
         win.geometry("350x300")
+        
+        # Gérer la fermeture de la fenêtre modale
+        def close_add_window():
+            win.destroy()
+        win.protocol("WM_DELETE_WINDOW", close_add_window)
 
         site = ctk.CTkEntry(win, placeholder_text="Site")
         site.pack(pady=5)
@@ -306,6 +404,46 @@ class MainApp(ctk.CTk):
             win.destroy()
 
         ctk.CTkButton(win, text="Save", command=save).pack(pady=10)
+
+    def quit_app(self):
+        global master_pwd, vault_data
+        # Cancel all scheduled tkinter callbacks
+        for after_id in list(getattr(self, '_after_ids', [])):
+            try:
+                self.after_cancel(after_id)
+            except:
+                pass
+        self._after_ids.clear()
+        # Disable all widgets
+        for widget in self.winfo_children():
+            try:
+                widget.configure(state="disabled")
+            except:
+                pass
+        # Schedule final cleanup
+        try:
+            self.after_idle(self._final_cleanup)
+        except Exception:
+            self._final_cleanup()
+
+    def _final_cleanup(self):
+        global master_pwd, vault_data
+        master_pwd = ''
+        vault_data.clear()
+        try:
+            import pyperclip
+            pyperclip.copy('')
+        except:
+            pass
+        # Destroy all toplevel windows and exit
+        for child in self.winfo_children():
+            if isinstance(child, ctk.CTkToplevel):
+                child.destroy()
+
+        self.quit()
+        self.destroy()
+        os._exit(0)
+            
 
 def launch_app():
     LoginWindow().mainloop()
