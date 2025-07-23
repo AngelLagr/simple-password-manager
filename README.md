@@ -4,96 +4,73 @@
 
 ## Description
 
-**Password Manager** est une application sécurisée développée en Python avec une interface graphique moderne utilisant `customtkinter`.  
+**Password Manager** is a secure application developed in Python with a modern graphical interface using `customtkinter`.
 
-Elle permet de stocker, générer, afficher et supprimer des mots de passe chiffrés localement avec un chiffrement AES-GCM 256 bits.  
+It allows you to store, generate, display, and delete passwords locally encrypted with AES-GCM 256-bit encryption.
 
-Le mot de passe maître est utilisé directement pour protéger le coffre (vault) chiffré, garantissant que sans ce mot de passe, il est impossible d’accéder aux données. Aucune donnée sensible n’est stockée en clair sur le disque ou dans le code.  
-
----
-
-## Fonctionnalités
-
-- Création d’un mot de passe maître sécurisé au premier lancement  
-- Chiffrement fort avec AES-GCM et dérivation de clé via Scrypt  
-- Gestion complète des entrées : ajout, suppression, affichage masqué, copie sécurisée dans le presse-papier  
-- Générateur de mots de passe robustes intégré  
-- Interface claire, intuitive et fluide  
-- Protection contre la réinitialisation non autorisée du mot de passe maître  
-- Stockage unique et chiffré du coffre (vault) dans `data/vault.enc`
+The master password is directly used to protect the encrypted vault, ensuring that without this password, it is impossible to access the data. No sensitive data is stored in plain text on disk or in the code.
 
 ---
 
-## Prérequis
+## Features
 
-- Python 3.8+  
-- Packages Python :  
+- Create a secure master password on first launch
+- Strong encryption with AES-GCM and key derivation via Scrypt
+- Full entry management: add, delete, masked display, secure clipboard copy
+- Built-in robust password generator
+- Clear, intuitive, and smooth interface
+- Protection against unauthorized master password reset
+- Single encrypted vault storage in `data/vault.enc`
+
+---
+
+## Prerequisites
+
+- Python 3.8+
+- Python packages:
+``` 
 pip install cryptography customtkinter pyperclip
-
-yaml
-Toujours afficher les détails
-
-Copier
+```
 
 ---
 
-## Utilisation en développement
+## Development Usage
 
-1. Cloner ou télécharger ce projet  
-2. Installer les dépendances (voir ci-dessus)  
-3. Lancer l’application :  
+1. Clone or download this project
+2. Install dependencies (see above)
+3. Run the application:
+```
 python main.py
-
-yaml
-Toujours afficher les détails
-
-Copier
-4. Au premier lancement, définir un mot de passe maître  
-5. Ajouter, supprimer ou copier des mots de passe facilement  
-6. Le vault est stocké chiffré dans `data/vault.enc`
+```
+4. On first launch, set a master password
+5. Easily add, delete, or copy passwords
+6. Vault is securely stored encrypted in `data/vault.enc`
 
 ---
 
-## Compilation en application autonome
+## Building a Standalone Application
 
-Pour créer un exécutable (ex : `.exe` sous Windows) et distribuer l’application sans dépendre de Python installé :
+To create an executable (e.g. `.exe` on Windows) and distribute the app without requiring Python installed:
 
-1. Installer PyInstaller :  
+1. Install PyInstaller:
+```
 pip install pyinstaller
-
-bash
-Toujours afficher les détails
-
-Copier
-2. Depuis le dossier du projet, lancer la compilation :  
+```
+2. From the project folder, run the build:
+```
 pyinstaller --noconsole --onefile main.py
-
-yaml
-Toujours afficher les détails
-
-Copier
-3. L’exécutable sera généré dans le dossier `dist/`  
-4. Copier et distribuer ce fichier directement  
-5. Le dossier `data/` sera créé automatiquement au premier lancement de l’exécutable
+```
+3. Executable will be generated in the `dist/` folder
+4. Copy and distribute this file directly
+5. The `data/` folder will be created automatically on the executable’s first run
 
 ---
 
-## Notes de sécurité importantes
+## Important Security Notes
 
-- **Le mot de passe maître est la clé unique du coffre**. Si tu le perds, tu ne pourras plus accéder à tes mots de passe.  
-- La suppression ou la modification du fichier `data/vault.enc` rendra tes données irrécupérables.  
-- Ne partage jamais ton mot de passe maître.  
-- Le chiffrement est local, aucune donnée n’est envoyée sur un serveur.  
-
----
-
-## Suggestions & Améliorations futures
-
-- Ajout d’un mécanisme de sauvegarde automatique / export chiffré  
-- Recherche rapide dans les entrées  
-- Edition d’entrées existantes  
-- Intégration d’un timeout de verrouillage automatique  
-- Interface plus personnalisable  
+- **The master password is the unique key to your vault.** If lost, you will no longer access your passwords.
+- Deleting or modifying `data/vault.enc` will make your data unrecoverable.
+- Encryption is local; no data is sent to any server.
 
 ---
 
