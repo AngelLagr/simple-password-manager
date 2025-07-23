@@ -16,10 +16,9 @@ The master password is directly used to protect the encrypted vault, ensuring th
 
 - Create a secure master password on first launch
 - Strong encryption with AES-GCM and key derivation via Scrypt
-- Full entry management: add, delete, masked display, secure clipboard copy
+- add, delete paswords, clipboard copy
 - Built-in robust password generator
-- Clear, intuitive, and smooth interface
-- Protection against unauthorized master password reset
+- very simple interface
 - Single encrypted vault storage in `data/vault.enc`
 
 ---
