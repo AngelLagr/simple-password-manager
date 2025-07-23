@@ -4,7 +4,7 @@
 
 ## Description
 
-**Password Manager** is a secure application developed in Python with a modern graphical interface using `customtkinter`.
+**Password Manager** is a simple graphical interface using `customtkinter` to manage locally your password.
 
 It allows you to store, generate, display, and delete passwords locally encrypted with AES-GCM 256-bit encryption.
 
@@ -72,6 +72,7 @@ pyinstaller --noconsole --onefile main.py
 - Deleting or modifying `data/vault.enc` will make your data unrecoverable.
 - Encryption is local; no data is sent to any server.
 
+I'm definitely not an expert in cybersecurity or anything like that, so any contributions are more than welcome! I just wanted to share this tool publicly because I found it useful.
 ---
 
 ## Licence
