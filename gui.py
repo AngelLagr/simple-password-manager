@@ -1,7 +1,8 @@
 import customtkinter as ctk
-from tkinter import messagebox
+from tkinter import messagebox, filedialog
 from storage import load_vault, save_vault, create_new_vault
 from password_generator import generate_password
+import difflib
 
 master_pwd = ''
 vault_data = {}
@@ -20,6 +21,9 @@ class LoginWindow(ctk.CTk):
         self.entry.pack()
         self.button = ctk.CTkButton(self, text="Login", command=self.login)
         self.button.pack(pady=10)
+        
+        self.load_button = ctk.CTkButton(self, text="Load Vault File", command=self.load_vault_file)
+        self.load_button.pack(pady=5)
 
         # Check vault presence
         import os
@@ -52,13 +56,113 @@ class LoginWindow(ctk.CTk):
         self.withdraw()
         MainApp().mainloop()
 
+    def load_vault_file(self):
+        global master_pwd, vault_data
+        pwd = self.entry.get()
+        if not pwd:
+            messagebox.showerror("Error", "Please enter master password first")
+            return
+            
+        file_path = filedialog.askopenfilename(
+            title="Select Vault File",
+            filetypes=[("Encrypted files", "*.enc"), ("All files", "*.*")]
+        )
+        
+        if not file_path:
+            return
+            
+        try:
+            loaded_data = load_vault(pwd, file_path)
+            
+            # Vérifier si on a besoin de gérer une fusion
+            if isinstance(loaded_data, dict) and "needs_merge" in loaded_data:
+                new_entries = loaded_data["new_entries"]
+                existing_entries = loaded_data["existing_entries"]
+                
+                # Demander à l'utilisateur ce qu'il veut faire
+                choice = self.show_merge_dialog(len(new_entries), len(existing_entries))
+                
+                if choice == "cancel":
+                    return
+                elif choice == "replace":
+                    from storage import merge_vaults
+                    vault_data = merge_vaults(new_entries, existing_entries, pwd, "replace")
+                elif choice == "backup":
+                    from storage import merge_vaults
+                    vault_data = merge_vaults(new_entries, existing_entries, pwd, "backup")
+                    messagebox.showinfo("Success", "Vault loaded and old vault backed up!")
+                elif choice == "merge":
+                    from storage import merge_vaults
+                    result = merge_vaults(new_entries, existing_entries, pwd, "merge")
+                    vault_data = result["entries"]
+                    if result.get("conflicts"):
+                        conflicts_str = ", ".join(result["conflicts"])
+                        messagebox.showwarning("Merge Complete", f"Vault merged successfully!\nOverwritten entries: {conflicts_str}")
+                    else:
+                        messagebox.showinfo("Success", "Vaults merged successfully!")
+            else:
+                vault_data = loaded_data
+            
+            master_pwd = pwd
+            self.withdraw()
+            MainApp().mainloop()
+            
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to load vault: {e}")
+
+    def show_merge_dialog(self, new_count, existing_count):
+        dialog = ctk.CTkToplevel(self)
+        dialog.title("Vault Conflict")
+        dialog.geometry("450x300")
+        dialog.transient(self)
+        dialog.grab_set()
+        
+        result = {"choice": "cancel"}
+        
+        ctk.CTkLabel(dialog, text="Vault Already Exists!", 
+                    font=ctk.CTkFont(size=16, weight="bold")).pack(pady=10)
+        
+        ctk.CTkLabel(dialog, text=f"Local vault: {existing_count} entries\nNew vault: {new_count} entries\n\nWhat would you like to do?").pack(pady=10)
+        
+        def set_choice(choice):
+            result["choice"] = choice
+            dialog.destroy()
+        
+        ctk.CTkButton(dialog, text="Replace (Delete old vault)", 
+                     command=lambda: set_choice("replace")).pack(pady=5)
+        
+        ctk.CTkButton(dialog, text="Backup old & Replace (Recommended)", 
+                     command=lambda: set_choice("backup")).pack(pady=5)
+        
+        ctk.CTkButton(dialog, text="Merge (Combine both vaults)", 
+                     command=lambda: set_choice("merge")).pack(pady=5)
+        
+        ctk.CTkButton(dialog, text="Cancel", 
+                     command=lambda: set_choice("cancel")).pack(pady=5)
+        
+        dialog.wait_window()
+        return result["choice"]
+
 class MainApp(ctk.CTk):
     def __init__(self):
         super().__init__()
         self.title("Password Manager")
-        self.geometry("600x500")
+        self.geometry("600x550")
+        self.filtered_data = vault_data.copy()
 
-        self.scrollable_frame = ctk.CTkScrollableFrame(self, width=580, height=400)
+        # Barre de recherche
+        self.search_frame = ctk.CTkFrame(self)
+        self.search_frame.pack(pady=10, padx=10, fill='x')
+        
+        ctk.CTkLabel(self.search_frame, text="Search:").pack(side='left', padx=5)
+        self.search_entry = ctk.CTkEntry(self.search_frame, placeholder_text="Search sites...")
+        self.search_entry.pack(side='left', fill='x', expand=True, padx=5)
+        self.search_entry.bind('<KeyRelease>', self.on_search)
+        
+        self.clear_btn = ctk.CTkButton(self.search_frame, text="Clear", width=60, command=self.clear_search)
+        self.clear_btn.pack(side='right', padx=5)
+
+        self.scrollable_frame = ctk.CTkScrollableFrame(self, width=580, height=350)
         self.scrollable_frame.pack(pady=10)
 
         self.add_btn = ctk.CTkButton(self, text="Add Entry", command=self.add_entry_popup)
@@ -66,17 +170,41 @@ class MainApp(ctk.CTk):
 
         self.refresh_list()
 
+    def on_search(self, event=None):
+        search_term = self.search_entry.get().lower()
+        if not search_term:
+            self.filtered_data = vault_data.copy()
+        else:
+            self.filtered_data = {}
+            for site, creds in vault_data.items():
+                site_lower = site.lower()
+                username_lower = creds['username'].lower()
+                
+                if (search_term in site_lower or 
+                    search_term in username_lower or
+                    any(difflib.get_close_matches(search_term, [site_lower], cutoff=0.6)) or
+                    any(difflib.get_close_matches(search_term, [username_lower], cutoff=0.6))):
+                    self.filtered_data[site] = creds
+        
+        self.refresh_list()
+
+    def clear_search(self):
+        self.search_entry.delete(0, 'end')
+        self.filtered_data = vault_data.copy()
+        self.refresh_list()
+
     def refresh_list(self):
         for widget in self.scrollable_frame.winfo_children():
             widget.destroy()
-        for site, creds in vault_data.items():
+        for site, creds in self.filtered_data.items():
             frame = ctk.CTkFrame(self.scrollable_frame)
             frame.pack(pady=5, padx=10, fill='x')
             ctk.CTkLabel(frame, text=site, width=100).pack(side='left')
             ctk.CTkLabel(frame, text=creds['username'], width=120).pack(side='left')
-            ctk.CTkEntry(frame, show="*", width=150, placeholder_text=creds['password']).pack(side='left')
-            ctk.CTkButton(frame, text="Copy", command=lambda p=creds['password']: self.clip(p)).pack(side='left')
-            ctk.CTkButton(frame, text="Delete", command=lambda s=site: self.delete_entry(s)).pack(side='left')
+            ctk.CTkEntry(frame, show="*", width=120, placeholder_text=creds['password']).pack(side='left')
+            ctk.CTkButton(frame, text="Copy", width=50, command=lambda p=creds['password']: self.clip(p)).pack(side='left', padx=2)
+            ctk.CTkButton(frame, text="Edit", width=50, command=lambda s=site: self.edit_entry(s)).pack(side='left', padx=2)
+            ctk.CTkButton(frame, text="Delete", width=60, command=lambda s=site: self.delete_entry(s)).pack(side='left', padx=2)
 
     def clip(self, pwd):
         import pyperclip
@@ -88,7 +216,63 @@ class MainApp(ctk.CTk):
             if messagebox.askyesno("Confirm Delete", f"Delete entry for '{site}'?"):
                 del vault_data[site]
                 save_vault(vault_data, master_pwd)
+                self.filtered_data = vault_data.copy()
                 self.refresh_list()
+
+    def edit_entry(self, site):
+        if site not in vault_data:
+            return
+            
+        win = ctk.CTkToplevel(self)
+        win.title(f"Edit Entry - {site}")
+        win.geometry("350x300")
+        
+        current_data = vault_data[site]
+        
+        site_entry = ctk.CTkEntry(win, placeholder_text="Site")
+        site_entry.pack(pady=5)
+        site_entry.insert(0, site)
+        
+        username_entry = ctk.CTkEntry(win, placeholder_text="Username")
+        username_entry.pack(pady=5)
+        username_entry.insert(0, current_data['username'])
+        
+        password_entry = ctk.CTkEntry(win, placeholder_text="Password")
+        password_entry.pack(pady=5)
+        password_entry.insert(0, current_data['password'])
+
+        def autofill():
+            password_entry.delete(0, 'end')
+            password_entry.insert(0, generate_password())
+
+        ctk.CTkButton(win, text="Generate New Password", command=autofill).pack(pady=5)
+
+        def save_changes():
+            new_site = site_entry.get()
+            new_username = username_entry.get()
+            new_password = password_entry.get()
+            
+            if not new_site or not new_username or not new_password:
+                messagebox.showerror("Error", "All fields must be filled")
+                return
+            
+            if new_site != site:
+                if new_site in vault_data:
+                    if not messagebox.askyesno("Confirm", f"Entry '{new_site}' already exists. Overwrite?"):
+                        return
+                del vault_data[site]
+            
+            vault_data[new_site] = {
+                'username': new_username,
+                'password': new_password
+            }
+            
+            save_vault(vault_data, master_pwd)
+            self.filtered_data = vault_data.copy()
+            self.refresh_list()
+            win.destroy()
+
+        ctk.CTkButton(win, text="Save Changes", command=save_changes).pack(pady=10)
 
     def add_entry_popup(self):
         win = ctk.CTkToplevel(self)
@@ -117,6 +301,7 @@ class MainApp(ctk.CTk):
                 'password': password.get()
             }
             save_vault(vault_data, master_pwd)
+            self.filtered_data = vault_data.copy()
             self.refresh_list()
             win.destroy()
 
